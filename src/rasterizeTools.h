@@ -99,20 +99,6 @@ float getZAtCoordinate(const glm::vec3 barycentricCoord, const glm::vec3 tri[3])
            + barycentricCoord.y * tri[1].z
            + barycentricCoord.z * tri[2].z);
 }
-
-__host__ __device__ static
-void clamp(int &i, int a, int b)
-{
-	if (i < a) i = a;
-	else if (i > b) i = b;
-}
-
-__host__ __device__ static
-void clamp(float &i, float a, float b)
-{
-	if (i < a) i = a;
-	else if (i > b) i = b;
-}
 template <typename T>
 __host__ __device__ __forceinline__ void swap(T &a, T &b)
 {

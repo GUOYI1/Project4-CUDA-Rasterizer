@@ -97,8 +97,10 @@ void mainLoop() {
 //---------RUNTIME STUFF---------
 //-------------------------------
 float scale = 1.0f;
-float x_trans = 0.0f, y_trans = 0.0f, z_trans = -10.0f;
+float x_trans = 0.0f, y_trans = -0.5f, z_trans = -3.0f;
 float x_angle = 0.0f, y_angle = 0.0f;
+float timecount[5] = { 0.f,0.f,0.f,0.f,0.f };
+int loop = 0;
 void runCuda() {
     // Map OpenGL buffer object for writing from CUDA on a single GPU
     // No data is moved (Win & Linux). When mapped to CUDA, OpenGL should not use this buffer
@@ -120,11 +122,22 @@ void runCuda() {
 	glm::mat4 MVP = P * MV;
 
     cudaGLMapBufferObject((void **)&dptr, pbo);
-	rasterize(dptr, MVP, MV, MV_normal);
+	rasterize(dptr, MVP, MV, MV_normal,timecount);
     cudaGLUnmapBufferObject(pbo);
 
     frame++;
     fpstracker++;
+	y_angle += 0.01f;
+	loop++;
+	if (loop == 120) {
+		FILE *fp = fopen("time.txt", "a+");
+		for (int i = 0; i < 5; i++)
+			fprintf(fp, "%f	", timecount[i]);
+		fprintf(fp, "\n");
+		fclose(fp);
+		printf("DONE\n");
+		//exit(0);
+	}
 }
 
 //-------------------------------
