@@ -101,6 +101,7 @@ float x_trans = 0.0f, y_trans = -0.5f, z_trans = -3.0f;
 float x_angle = 0.0f, y_angle = 0.0f;
 float timecount[5] = { 0.f,0.f,0.f,0.f,0.f };
 int loop = 0;
+int renderMode = 0;//0: Triangle, 1: Line: 2: Point
 void runCuda() {
     // Map OpenGL buffer object for writing from CUDA on a single GPU
     // No data is moved (Win & Linux). When mapped to CUDA, OpenGL should not use this buffer
@@ -122,22 +123,27 @@ void runCuda() {
 	glm::mat4 MVP = P * MV;
 
     cudaGLMapBufferObject((void **)&dptr, pbo);
-	rasterize(dptr, MVP, MV, MV_normal,timecount);
+	rasterize(dptr, MVP, MV, MV_normal,renderMode,timecount);
     cudaGLUnmapBufferObject(pbo);
 
     frame++;
     fpstracker++;
-	y_angle += 0.01f;
-	loop++;
-	if (loop == 120) {
+	//y_angle += 0.01f;
+	/*loop++;
+	if (loop == 60) {
 		FILE *fp = fopen("time.txt", "a+");
-		for (int i = 0; i < 5; i++)
+		float total = 0;
+		for (int i = 0; i < 5; i++) {
 			fprintf(fp, "%f	", timecount[i]);
+			total += timecount[i];
+		}
+		fprintf(fp, "%f	", total);
+			
 		fprintf(fp, "\n");
 		fclose(fp);
 		printf("DONE\n");
-		//exit(0);
-	}
+		exit(0);
+	}*/
 }
 
 //-------------------------------
@@ -341,6 +347,10 @@ void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, GL_TRUE);
     }
+	else if (key == GLFW_KEY_T && action==GLFW_RELEASE) {
+		renderMode++;
+		if (renderMode > 2) renderMode = 0;
+	}
 }
 
 //----------------------------

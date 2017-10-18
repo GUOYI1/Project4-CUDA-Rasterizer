@@ -24,11 +24,8 @@
 #define BILINEAR 0
 #define PERSPECTIVE 1
 
-#define TRIANGLE 1
-#define LINE 0
-#define POINT 0
 
-#define SSAA 1
+#define SSAA 4
 namespace {
 
 	typedef unsigned short VertexIndex;
@@ -215,7 +212,7 @@ void sendImageToPBO(uchar4 *pbo, int w, int h, glm::vec3 *image,int ssaa) {
 * Writes fragment colors to the framebuffer
 */
 __global__
-void render(int w, int h, Fragment *fragmentBuffer, glm::vec3 *framebuffer) {
+void render(int w, int h, Fragment *fragmentBuffer, glm::vec3 *framebuffer,int renderMode) {
     int x = (blockIdx.x * blockDim.x) + threadIdx.x;
     int y = (blockIdx.y * blockDim.y) + threadIdx.y;
     int index = x + (y * w);
@@ -242,49 +239,49 @@ void render(int w, int h, Fragment *fragmentBuffer, glm::vec3 *framebuffer) {
 	
 	glm::vec3 renderColor = glm::vec3(0.f);
 	framebuffer[index] = glm::vec3(0.f);
-#if TRIANGLE
-    if (x < w && y < h) {
-		// TODO: add your fragment shader code here
-		float uFloat = curFrag.texcoord0.x * texWidth;
-		float vFloat=curFrag.texcoord0.y* texHeight;
-		int u = (int)uFloat;
-		int v = (int)vFloat;
-		int uvIdx = 3 * (u + v * texWidth);
-		TextureData* texture = curFrag.dev_diffuseTex;
+	if (renderMode == 0) {
+		if (x < w && y < h) {
+			// TODO: add your fragment shader code here
+			float uFloat = curFrag.texcoord0.x * texWidth;
+			float vFloat = curFrag.texcoord0.y* texHeight;
+			int u = (int)uFloat;
+			int v = (int)vFloat;
+			int uvIdx = 3 * (u + v * texWidth);
+			TextureData* texture = curFrag.dev_diffuseTex;
 #if BILINEAR
-		if (texture) {
-			int leftdown = 3 * (u + v * texWidth);
-			int rightdown = leftdown + 3;
-			int leftup = leftdown+3*texWidth;
-			int rightup = leftup+3;
-			glm::vec3 textureLD(texture[leftdown] / 255.f, texture[leftdown + 1] / 255.f, texture[leftdown + 2] / 255.f);
-			glm::vec3 textureRD(texture[rightdown] / 255.f, texture[rightdown + 1] / 255.f, texture[rightdown + 2] / 255.f);
-			glm::vec3 textureLU(texture[leftup] / 255.f, texture[leftup + 1] / 255.f, texture[leftup + 2] / 255.f);
-			glm::vec3 textureRU(texture[rightup] / 255.f, texture[rightup + 1] / 255.f, texture[rightup + 2] / 255.f);
-			glm::vec2 coord(uFloat - u, vFloat - v);
-			diffuseColor = BilinearInterpolation(coord, textureLD, textureRD, textureLU, textureRU);
-		}
-		else diffuseColor = curFrag.color;
+			if (texture) {
+				int leftdown = 3 * (u + v * texWidth);
+				int rightdown = leftdown + 3;
+				int leftup = leftdown + 3 * texWidth;
+				int rightup = leftup + 3;
+				glm::vec3 textureLD(texture[leftdown] / 255.f, texture[leftdown + 1] / 255.f, texture[leftdown + 2] / 255.f);
+				glm::vec3 textureRD(texture[rightdown] / 255.f, texture[rightdown + 1] / 255.f, texture[rightdown + 2] / 255.f);
+				glm::vec3 textureLU(texture[leftup] / 255.f, texture[leftup + 1] / 255.f, texture[leftup + 2] / 255.f);
+				glm::vec3 textureRU(texture[rightup] / 255.f, texture[rightup + 1] / 255.f, texture[rightup + 2] / 255.f);
+				glm::vec2 coord(uFloat - u, vFloat - v);
+				diffuseColor = BilinearInterpolation(coord, textureLD, textureRD, textureLU, textureRU);
+			}
+			else diffuseColor = curFrag.color;
 #else
-		if (texture)
-			diffuseColor = glm::vec3(texture[uvIdx] / 255.f, texture[uvIdx + 1] / 255.f, texture[uvIdx + 2] / 255.f);
-		else diffuseColor = curFrag.color;
+			if (texture)
+				diffuseColor = glm::vec3(texture[uvIdx] / 255.f, texture[uvIdx + 1] / 255.f, texture[uvIdx + 2] / 255.f);
+			else diffuseColor = curFrag.color;
 #endif
-		
-		//Lambert
-		//renderColor = diffuseColor * cosValue;
+
+			//Lambert
+			//renderColor = diffuseColor * cosValue;
 
 
-		//Blinning Phong
-		glm::vec3 H = glm::normalize(lightDir + EyeDir);
-		ks = 0.75 * pow(glm::max(0.f, glm::dot(H, curEyeNor)), Shiness);
-		renderColor = ambientColor * ka * lightEmittance + lightEmittance * (kd * cosValue * diffuseColor + ks * specularColor);
-		framebuffer[index] = renderColor;
+			//Blinning Phong
+			glm::vec3 H = glm::normalize(lightDir + EyeDir);
+			ks = 0.75 * pow(glm::max(0.f, glm::dot(H, curEyeNor)), Shiness);
+			renderColor = ambientColor * ka * lightEmittance + lightEmittance * (kd * cosValue * diffuseColor + ks * specularColor);
+			//renderColor= curFrag.color;
+			framebuffer[index] = renderColor;
+		}
 	}
-#else 
-	framebuffer[index] = curFrag.color;
-#endif
-
+	else 
+		framebuffer[index] = curFrag.color;
 	//framebuffer[index] = glm::vec3(1.f, 0.f, 0.f);
 }
 
@@ -856,7 +853,7 @@ void CompressPrimitives(int &numPrimitives, Primitive* primitives, bool *flag)
 	numPrimitives = thrust::count_if(dev_ptrFlag, dev_ptrFlag + numPrimitives, thrust::identity<bool>());
 }
 
-__global__ void kernRasterize(Fragment* fragment,int* depth, Primitive* primitive, const int numPrimitives,const int width, const int height) {
+__global__ void kernRasterize(Fragment* fragment,int* depth, Primitive* primitive, const int numPrimitives,const int width, const int height,int renderMode) {
 	int pid = (blockIdx.x * blockDim.x) + threadIdx.x;
 	if (pid < numPrimitives) {
 		Primitive targetPrimitive = primitive[pid];
@@ -873,70 +870,74 @@ __global__ void kernRasterize(Fragment* fragment,int* depth, Primitive* primitiv
 			targetPrimitive.v[1].texcoord0,
 			targetPrimitive.v[2].texcoord0 };
 		int pixelIdx = 0;
-#if TRIANGLE
-		AABB targetBound = getAABBForTriangle(tri);
-		//int iMaxx = (-targetBound.min.x + 1.0f) * 0.5f * float(width);
-		//int iMinx = (-targetBound.max.x + 1.0f) * 0.5f * float(width);
-		//int iMaxy = (-targetBound.min.y + 1.0f) * 0.5f * float(height);
-		//int iMiny = (-targetBound.max.y + 1.0f) * 0.5f * float(height);
-		
-		int iMinx= glm::max((int)targetBound.min.x, 0);
-		int iMaxx = glm::min((int)targetBound.max.x, width - 1);
-		int iMiny = glm::max((int)targetBound.min.y, 0);
-		int iMaxy = glm::min((int)targetBound.max.y, height - 1);
-		glm::vec2 curPixelCord;
-		glm::vec3 curBaryCord;//project the 2d pixel coordinate into 3d space.
-		int curPixelDepth=1; // Store the depth of the current pixel.
-		for (int x = iMinx; x <= iMaxx; x++) {
-			for (int y = iMiny; y <= iMaxy; y++) {
-				curPixelCord.x = x;
-				curPixelCord.y = y;
-				pixelIdx = y * width + x;
-				auto& curFrag = fragment[pixelIdx];
-				curBaryCord = calculateBarycentricCoordinate(tri, curPixelCord);
-				if (isBarycentricCoordInBounds(curBaryCord)) {
-					
-					float tempDepth= -getZAtCoordinate(curBaryCord, tri);
-					glm::clamp(tempDepth, -1.f, 1.f);
-					curPixelDepth = static_cast<int>(tempDepth * INT_MAX);// avoid z-fighting	
-					////Instead of using atmoicCAS, I use atomicMin which is much easier to implement
-					int oldDepth = atomicMin(&depth[pixelIdx], curPixelDepth);
-					if (curPixelDepth<oldDepth) {
-						curFrag.eyePos = curBaryCord.x * triEyePos[0] + curBaryCord.y * triEyePos[1] + curBaryCord.z * triEyePos[2];
-						curFrag.eyeNor = glm::normalize(curBaryCord.x * triEyeNor[0] + curBaryCord.y * triEyeNor[1] + curBaryCord.z * triEyeNor[2]);
-						curFrag.dev_diffuseTex = targetPrimitive.v[0].dev_diffuseTex;
-						curFrag.diffuseTexWidth = targetPrimitive.v[0].diffuseTexWidth;
-						curFrag.diffuseTexHeight = targetPrimitive.v[0].diffuseTexHeight;
-						//color without correction
-						//fragment[pixelIdx].color = glm::vec3(1.f, 0.f, 0.f);
-						curFrag.color = curBaryCord.x * targetPrimitive.v[0].col + curBaryCord.y * targetPrimitive.v[1].col + curBaryCord.z * targetPrimitive.v[2].col;
+		if (renderMode == 0) {
+			AABB targetBound = getAABBForTriangle(tri);
+			//int iMaxx = (-targetBound.min.x + 1.0f) * 0.5f * float(width);
+			//int iMinx = (-targetBound.max.x + 1.0f) * 0.5f * float(width);
+			//int iMaxy = (-targetBound.min.y + 1.0f) * 0.5f * float(height);
+			//int iMiny = (-targetBound.max.y + 1.0f) * 0.5f * float(height);
+
+			int iMinx = glm::max((int)targetBound.min.x, 0);
+			int iMaxx = glm::min((int)targetBound.max.x, width - 1);
+			int iMiny = glm::max((int)targetBound.min.y, 0);
+			int iMaxy = glm::min((int)targetBound.max.y, height - 1);
+			glm::vec2 curPixelCord;
+			glm::vec3 curBaryCord;//project the 2d pixel coordinate into 3d space.
+			int curPixelDepth = 1; // Store the depth of the current pixel.
+			for (int x = iMinx; x <= iMaxx; x++) {
+				for (int y = iMiny; y <= iMaxy; y++) {
+					curPixelCord.x = x;
+					curPixelCord.y = y;
+					pixelIdx = y * width + x;
+					auto& curFrag = fragment[pixelIdx];
+					curBaryCord = calculateBarycentricCoordinate(tri, curPixelCord);
+					if (isBarycentricCoordInBounds(curBaryCord)) {
+
+						float tempDepth = -getZAtCoordinate(curBaryCord, tri);
+						glm::clamp(tempDepth, -1.f, 1.f);
+						curPixelDepth = static_cast<int>(tempDepth * INT_MAX);// avoid z-fighting	
+						////Instead of using atmoicCAS, I use atomicMin which is much easier to implement
+						int oldDepth = atomicMin(&depth[pixelIdx], curPixelDepth);
+						if (curPixelDepth < oldDepth) {
+							curFrag.eyePos = curBaryCord.x * triEyePos[0] + curBaryCord.y * triEyePos[1] + curBaryCord.z * triEyePos[2];
+							curFrag.eyeNor = glm::normalize(curBaryCord.x * triEyeNor[0] + curBaryCord.y * triEyeNor[1] + curBaryCord.z * triEyeNor[2]);
+							curFrag.dev_diffuseTex = targetPrimitive.v[0].dev_diffuseTex;
+							curFrag.diffuseTexWidth = targetPrimitive.v[0].diffuseTexWidth;
+							curFrag.diffuseTexHeight = targetPrimitive.v[0].diffuseTexHeight;
+							//color without correction
+							//fragment[pixelIdx].color = glm::vec3(1.f, 0.f, 0.f);
+							//curFrag.color = curFrag.eyeNor;
+							curFrag.color = curBaryCord.x * targetPrimitive.v[0].col + curBaryCord.y * targetPrimitive.v[1].col + curBaryCord.z * targetPrimitive.v[2].col;
+
 #if PERSPECTIVE
-						float z = curBaryCord.x*triEyePos[0].z + curBaryCord.y*triEyePos[1].z + curBaryCord.z*triEyePos[2].z;
-						curFrag.texcoord0 = z*(curBaryCord.x / triEyePos[0].z*Texcoord[0] +
-							curBaryCord.y / triEyePos[1].z*Texcoord[1] +
-							curBaryCord.z / triEyePos[2].z*Texcoord[2]);
+							float z = curBaryCord.x*triEyePos[0].z + curBaryCord.y*triEyePos[1].z + curBaryCord.z*triEyePos[2].z;
+							curFrag.texcoord0 = z*(curBaryCord.x / triEyePos[0].z*Texcoord[0] +
+								curBaryCord.y / triEyePos[1].z*Texcoord[1] +
+								curBaryCord.z / triEyePos[2].z*Texcoord[2]);
 #else
-						curFrag.texcoord0 = curBaryCord.x * Texcoord[0] + curBaryCord.y * Texcoord[1] + curBaryCord.z * Texcoord[2];
+							curFrag.texcoord0 = curBaryCord.x * Texcoord[0] + curBaryCord.y * Texcoord[1] + curBaryCord.z * Texcoord[2];
 #endif
 
+						}
 					}
 				}
 			}
 		}
-#elif POINT
-		for (int i = 0; i < 3; i++) {
-			int x = (int)tri[i].x;
-			int y = (int)tri[i].y;
-			if (x >= 0 && x <= width - 1 && y >= 0 && y <= height - 1) {
-				pixelIdx= x + y * width;
-				fragment[pixelIdx].color = glm::vec3(1.f, 0.8f, 0);
+		else if (renderMode == 2) {
+			for (int i = 0; i < 3; i++) {
+				int x = (int)tri[i].x;
+				int y = (int)tri[i].y;
+				if (x >= 0 && x <= width - 1 && y >= 0 && y <= height - 1) {
+					pixelIdx = x + y * width;
+					fragment[pixelIdx].color = glm::vec3(1.f, 0.8f, 0);
+				}
 			}
 		}
-#elif LINE
-		Bresenham(tri[0], tri[1], fragment, width, height);
-		Bresenham(tri[1], tri[2], fragment, width, height);
-		Bresenham(tri[0], tri[2], fragment, width, height);
-#endif
+		else if (renderMode == 1) {
+			Bresenham(tri[0], tri[1], fragment, width, height);
+			Bresenham(tri[1], tri[2], fragment, width, height);
+			Bresenham(tri[0], tri[2], fragment, width, height);
+		}
 	}
 }
 
@@ -949,9 +950,9 @@ __global__ void kernRasterize(Fragment* fragment,int* depth, Primitive* primitiv
 /**
  * Perform rasterization.
  */
-void rasterize(uchar4 *pbo, const glm::mat4 & MVP, const glm::mat4 & MV, const glm::mat3 MV_normal,float* timecount) {
+void rasterize(uchar4 *pbo, const glm::mat4 & MVP, const glm::mat4 & MV, const glm::mat3 MV_normal,int renderMode,float* timecount) {
     int sideLength2d = 8;
-	int T = 0;
+	float T = 0;
     dim3 blockSize2d(sideLength2d, sideLength2d);
     dim3 blockCount2d((width  - 1) / blockSize2d.x + 1,
 		(height - 1) / blockSize2d.y + 1);
@@ -973,14 +974,37 @@ void rasterize(uchar4 *pbo, const glm::mat4 & MVP, const glm::mat4 & MV, const g
 			for (; p != pEnd; ++p) {
 				dim3 numBlocksForVertices((p->numVertices + numThreadsPerBlock.x - 1) / numThreadsPerBlock.x);
 				dim3 numBlocksForIndices((p->numIndices + numThreadsPerBlock.x - 1) / numThreadsPerBlock.x);
+				/*T = 0.0f;
+				cudaEventCreate(&start);
+				cudaEventCreate(&stop);
+				cudaEventRecord(start, 0);*/
+
 				_vertexTransformAndAssembly << < numBlocksForVertices, numThreadsPerBlock >> >(p->numVertices, *p, MVP, MV, MV_normal, width, height);
+				
+				//cudaEventRecord(stop, 0);
+				//cudaEventSynchronize(start);
+				//cudaEventSynchronize(stop);
+				//cudaEventElapsedTime(&T, start, stop);
+				//timecount[0] += T;
 				checkCUDAError("Vertex Processing");
 				cudaDeviceSynchronize();
+
+				/*T = 0.0f;
+				cudaEventCreate(&start);
+				cudaEventCreate(&stop);
+				cudaEventRecord(start, 0);*/
+
 				_primitiveAssembly << < numBlocksForIndices, numThreadsPerBlock >> >
 					(p->numIndices, 
 					curPrimitiveBeginId, 
 					dev_primitives, 
 					*p);
+
+				/*cudaEventRecord(stop, 0);
+				cudaEventSynchronize(start);
+				cudaEventSynchronize(stop);
+				cudaEventElapsedTime(&T, start, stop);
+				timecount[1] += T;*/
 				checkCUDAError("Primitive Assembly");
 
 				curPrimitiveBeginId += p->numPrimitives;
@@ -991,23 +1015,57 @@ void rasterize(uchar4 *pbo, const glm::mat4 & MVP, const glm::mat4 & MV, const g
 	}
 	dim3 numPrmitiveBlock((curPrimitiveBeginId + numThreadsPerBlock.x - 1) / numThreadsPerBlock.x);
 	//backfaceCulling
-#if TRIANGLE
-	//backFaceCulling<< < numPrmitiveBlock, numThreadsPerBlock >> >(curPrimitiveBeginId, dev_primitives, dev_flag);
-	//CompressPrimitives(curPrimitiveBeginId, dev_primitives, dev_flag);
-#endif
-
+	if (renderMode == 0) {
+		backFaceCulling<< < numPrmitiveBlock, numThreadsPerBlock >> >(curPrimitiveBeginId, dev_primitives, dev_flag);
+		CompressPrimitives(curPrimitiveBeginId, dev_primitives, dev_flag);
+	}
 	cudaMemset(dev_fragmentBuffer, 0, width * height * sizeof(Fragment));
 	initDepth << <blockCount2d, blockSize2d >> >(width, height, dev_depth);
 
 	// TODO: rasterize
 	numPrmitiveBlock = dim3((curPrimitiveBeginId + numThreadsPerBlock.x - 1) / numThreadsPerBlock.x);
-	kernRasterize << <numPrmitiveBlock, numThreadsPerBlock >> > (dev_fragmentBuffer, dev_depth, dev_primitives, curPrimitiveBeginId,width, height);
+	//T = 0.0f;
+	//cudaEventCreate(&start);
+	//cudaEventCreate(&stop);
+	//cudaEventRecord(start, 0);
+
+	kernRasterize << <numPrmitiveBlock, numThreadsPerBlock >> > (dev_fragmentBuffer, dev_depth, dev_primitives, curPrimitiveBeginId,width, height,renderMode);
+
+	//cudaEventRecord(stop, 0);
+	//cudaEventSynchronize(start);
+	//cudaEventSynchronize(stop);
+	//cudaEventElapsedTime(&T, start, stop);
+	//timecount[2] += T;
 
     // Copy depthbuffer colors into framebuffer
-	render << <blockCount2d, blockSize2d >> >(width, height, dev_fragmentBuffer, dev_framebuffer);
+	/*T = 0.0f;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start, 0);*/
+
+	render << <blockCount2d, blockSize2d >> >(width, height, dev_fragmentBuffer, dev_framebuffer,renderMode);
+
+	//cudaEventRecord(stop, 0);
+	//cudaEventSynchronize(start);
+	//cudaEventSynchronize(stop);
+	//cudaEventElapsedTime(&T, start, stop);
+	//timecount[3] += T;
+
 	checkCUDAError("fragment shader");
     // Copy framebuffer into OpenGL buffer for OpenGL previewing
-    sendImageToPBO<<<blockCount2d, blockSize2d>>>(pbo, imageWidth, imageHeight, dev_framebuffer,SSAA);
+	/*T = 0.0f;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start, 0);*/
+    
+	sendImageToPBO<<<blockCount2d, blockSize2d>>>(pbo, imageWidth, imageHeight, dev_framebuffer,SSAA);
+	//
+	//cudaEventRecord(stop, 0);
+	//cudaEventSynchronize(start);
+	//cudaEventSynchronize(stop);
+	//cudaEventElapsedTime(&T, start, stop);
+	//timecount[4] += T;
+
     checkCUDAError("copy render result to pbo");
 }
 
