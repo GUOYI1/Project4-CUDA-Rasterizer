@@ -78,9 +78,9 @@ Supersampling is used to remove aliasing (jagged and pixelated edges). It is ach
 	<td>SSAA=4.gltf</td>
 </tr>
 <tr>
-	<td><img src="renders/SSAA1.gif"/></td>
-	<td><img src="renders/SSAA2.gif"/></td>
-	<td><img src="renders/SSAA4.gif"/></td>
+	<td><img src="renders/SSAA1.png"/></td>
+	<td><img src="renders/SSAA2.png"/></td>
+	<td><img src="renders/SSAA4.png"/></td>
 </tr>
 </table>
 
