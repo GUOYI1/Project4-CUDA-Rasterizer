@@ -97,7 +97,7 @@ void mainLoop() {
 //---------RUNTIME STUFF---------
 //-------------------------------
 float scale = 1.0f;
-float x_trans = 0.0f, y_trans = -0.5f, z_trans = -3.0f;
+float x_trans = 0.0f, y_trans = -0.5f, z_trans = -6.0f;
 float x_angle = 0.0f, y_angle = 0.0f;
 float timecount[5] = { 0.f,0.f,0.f,0.f,0.f };
 int loop = 0;
